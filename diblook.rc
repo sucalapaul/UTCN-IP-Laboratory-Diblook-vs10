@@ -170,6 +170,7 @@ BEGIN
             MENUITEM "Gaussian1",                   ID_FILTER_GAUSSIAN1
             MENUITEM "Gaussian2",                   ID_FILTER_GAUSSIAN2
         END
+        MENUITEM "Edge detection",              ID_PROCESSING_EDGEDETECTION
     END
 END
 

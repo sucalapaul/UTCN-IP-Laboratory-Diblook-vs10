@@ -53,13 +53,14 @@
 #define ID_FILTER_SALTPEPPER            32797
 #define ID_FILTER_GAUSSIAN1             32798
 #define ID_FILTER_GAUSSIAN2             32799
+#define ID_PROCESSING_EDGEDETECTION     32800
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        107
-#define _APS_NEXT_COMMAND_VALUE         32800
+#define _APS_NEXT_COMMAND_VALUE         32801
 #define _APS_NEXT_CONTROL_VALUE         108
 #define _APS_NEXT_SYMED_VALUE           102
 #endif

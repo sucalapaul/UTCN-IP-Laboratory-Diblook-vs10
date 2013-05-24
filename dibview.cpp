@@ -136,6 +136,8 @@ IMPLEMENT_DYNCREATE(CDibView, CScrollView)
 		ON_COMMAND(ID_PROCESSING_GAUSSIANFILTER, &CDibView::OnProcessingGaussianfilter)
 		ON_COMMAND(ID_FILTER_SALTPEPPER, &CDibView::OnFilterSaltpepper)
 		ON_COMMAND(ID_FILTER_GAUSSIAN1, &CDibView::OnFilterGaussian1)
+		ON_COMMAND(ID_FILTER_GAUSSIAN2, &CDibView::OnFilterGaussian2)
+		ON_COMMAND(ID_PROCESSING_EDGEDETECTION, &CDibView::OnProcessingEdgedetection)
 	END_MESSAGE_MAP()
 
 	/////////////////////////////////////////////////////////////////////////////
@@ -1429,7 +1431,16 @@ IMPLEMENT_DYNCREATE(CDibView, CScrollView)
 		{
 			for (int j = size2; j<dwWidth-size2; j++)
 			{
-
+				//each pixel in source
+				float newpixel = 0;
+				for (int ii = 0; ii < size; ii ++)
+				{
+					for (int jj = 0; jj < size; jj++)
+					{
+						newpixel += lpSrc[ (i+ii-size2)*w + (j+jj-size2) ] * g[ii][jj];
+					}
+				}
+				lpDst[ i*w + j ] = newpixel / sum;
 			}
 		}
 
@@ -1438,4 +1449,58 @@ IMPLEMENT_DYNCREATE(CDibView, CScrollView)
 				
 		END_PROCESSING("Gaussian Filter");
 
+	}
+
+
+	void CDibView::OnFilterGaussian2()
+	{		
+		BEGIN_PROCESSING();
+
+		int size = 3;
+		int size2 = size/2;
+		double g[3];
+		double sigma = 0.8;
+		double sum = 0;
+
+		//convolution matrix
+		for (int i = 0; i<size; i++)
+		{
+			double kk = exp( -(( (size2-i)*(size2-i) ) / 2.0*sigma*sigma) );
+			g[i] = 1/(2.0*3.14*sigma) * kk;
+			sum = sum + g[i]*2;
+		}
+		//half the value of middle point; it will be added twice
+		g[size2] = g[size2]/2;
+		sum = sum - g[size2];
+
+		for (int i = size2; i<dwHeight-size2; i++)
+		{
+			for (int j = size2; j<dwWidth-size2; j++)
+			{
+				//each pixel in source
+				float newpixel = 0;
+				for (int ii = 0; ii < size; ii ++)
+				{
+					newpixel += lpSrc[ (i+ii-size2)*w + (j) ] * g[ii];
+					newpixel += lpSrc[ (i)*w + (j+ii-size2) ] * g[ii];
+				}
+				lpDst[ i*w + j ] = newpixel / sum;
+			}
+		}
+				
+		END_PROCESSING("Gaussian Filter");
+	}
+
+	//void computeConvolution(int* kernel, float* buffer, int size)
+	//{
+	//
+	//}
+
+	void CDibView::OnProcessingEdgedetection()
+	{
+		BEGIN_PROCESSING();
+
+
+		
+		END_PROCESSING("Gaussian Filter");
 	}

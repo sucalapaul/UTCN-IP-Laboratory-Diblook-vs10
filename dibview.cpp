@@ -25,6 +25,8 @@
 #include "DlgHistogram.h"
 #include "CustomBlurDlg.h"
 
+#define PI 3.14159265
+
 #ifdef _DEBUG
 #undef THIS_FILE
 static char BASED_CODE THIS_FILE[] = __FILE__;
@@ -138,6 +140,7 @@ IMPLEMENT_DYNCREATE(CDibView, CScrollView)
 		ON_COMMAND(ID_FILTER_GAUSSIAN1, &CDibView::OnFilterGaussian1)
 		ON_COMMAND(ID_FILTER_GAUSSIAN2, &CDibView::OnFilterGaussian2)
 		ON_COMMAND(ID_PROCESSING_EDGEDETECTION, &CDibView::OnProcessingEdgedetection)
+		ON_COMMAND(ID_PROCESSING_TEST, &CDibView::OnProcessingTest)
 	END_MESSAGE_MAP()
 
 	/////////////////////////////////////////////////////////////////////////////
@@ -1496,11 +1499,314 @@ IMPLEMENT_DYNCREATE(CDibView, CScrollView)
 	//
 	//}
 
+	struct pixel {
+		int x, y, val;
+		struct pixel *pnext;
+	};
+
+	struct pixel *front = NULL;
+	struct pixel *back = NULL;
+
+	struct pixel* enqueue (int x, int y, int val)
+	{
+		struct pixel *ptr = (struct pixel*)malloc(sizeof(struct pixel));
+		ptr->x = x;
+		ptr->y = y;
+		ptr->val = val;
+		ptr->pnext = NULL;
+
+		if (front == NULL)
+		{
+			front = back = ptr;
+		}
+		else 
+		{
+			back->pnext = ptr;
+			back = ptr;
+		}
+
+		return back;
+	}
+
+	struct pixel* dequeue ()
+	{
+		if (front == NULL)
+		{
+			return NULL;
+		}
+		pixel *ptr;
+		ptr = front;
+		front = front->pnext;
+		if (front == NULL)
+		{
+			back = NULL;
+		}
+		return ptr;
+	}
+
 	void CDibView::OnProcessingEdgedetection()
 	{
 		BEGIN_PROCESSING();
 
+		//gaussian filter
+		int size = 7;
+		int size2 = size/2;
+		double g[7][7];
+		double sigma = 0.8;
+		double sum = 0;
 
+		int *hist = (int*) malloc(256 * sizeof(int));
+		int *bufferSrc = (int*) malloc(w*dwHeight * sizeof(int));
+
+		memset(hist, 255, 255);
+
+		for (int i = 0; i<size; i++)
+		{
+			for (int j = 0; j<size; j++)
+			{
+				double kk = exp( -(((size2-i)*(size2-i) + (size2-j)*(size2-j)) / 2.0*sigma*sigma) );
+				g[i][j] = 1/(2.0*3.14*sigma*sigma) * kk;
+				sum = sum + g[i][j];
+			}
+		}
+		//convolution for gaussian filter
+		for (int i = size2; i<dwHeight-size2; i++)
+		{
+			for (int j = size2; j<dwWidth-size2; j++)
+			{
+				//each pixel in source
+				float newpixel = 0;
+				for (int ii = 0; ii < size; ii ++)
+				{
+					for (int jj = 0; jj < size; jj++)
+					{
+						newpixel += lpSrc[ (i+ii-size2)*w + (j+jj-size2) ] * g[ii][jj];
+					}
+				}
+				bufferSrc[ i*w + j ] = newpixel / sum;
+			}
+		}
+
+
+		//compute gradient and magnitude
+
+		int sobelKernelX[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
+		int sobelKernelY[3][3] = {{1, 2, 1}, {0, 0, 0}, {-1, -2, -1}};
 		
-		END_PROCESSING("Gaussian Filter");
+		float *bufferX = (float*) malloc(w*dwHeight * sizeof(float));
+		float *bufferY = (float*) malloc(w*dwHeight * sizeof(float));
+
+		size = 3;
+		size2 = size/2;
+
+		int sumX = 0, sumY = 0;
+
+		/*for (int i = 0; i < size; i++)
+		{
+			for (int j = 0; i < size; i++)
+			{
+				sumX += sobelKernelX[i][j];
+				sumY += sobelKernelY[i][j];
+			}
+		}*/
+		
+		sumX = 4;
+		sumY = 4;
+		memset(bufferX, 0, w*dwHeight);
+		memset(bufferY, 0, w*dwHeight);
+
+		//compute vector components
+		for (int i = size2; i<dwHeight-size2; i++)
+		{
+			for (int j = size2; j<dwWidth-size2; j++)
+			{
+				//each pixel in source
+				float newPixelX = 0;
+				float newPixelY = 0;
+
+				for (int ii = 0; ii < size; ii ++)
+				{
+					for (int jj = 0; jj < size; jj++)
+					{
+						newPixelX += bufferSrc[ (i+ii-size2)*w + (j+jj-size2) ] * sobelKernelX[ii][jj];
+						newPixelY += bufferSrc[ (i+ii-size2)*w + (j+jj-size2) ] * sobelKernelY[ii][jj];
+					}
+				}
+				bufferX[ i*w + j ] = newPixelX / sumX;
+				bufferY[ i*w + j ] = newPixelY / sumY;
+			}
+		}
+
+
+		//vector module and direction
+		for (int i = 0; i<dwHeight; i++)
+		{
+			for (int j = 0; j<dwWidth; j++)
+			{
+				float module = sqrt( bufferX[i*w + j]*bufferX[i*w + j] + bufferY[i*w + j]*bufferY[i*w + j] );
+				float direction = atan( bufferY[i*w + j] / bufferX[i*w + j] ) * 180 / PI;
+
+				if (i < 4 || i > dwHeight-5 || j < 4 || j > dwWidth-5)
+				{
+					module = 0;
+				}
+
+
+				bufferX[i*w + j] = module;
+				bufferY[i*w + j] = direction;
+				bufferSrc[i*w + j] = module;
+
+				//lpDst[i*w + j] = module;
+			}
+		}
+		
+		//Non maxima suppression of the gradient's module
+		//Adica subtiez edge-urile
+		for (int i = 1; i<dwHeight-1; i++)
+		{
+			for (int j = 1; j<dwWidth-1; j++)
+			{
+				float direction = bufferY[i*w + j];
+
+				if ( (direction > 67.5 && direction < 112.5) || (direction > 247.5 && direction < 292.5) )
+				{
+					//case 0
+					if ( bufferX[i*w + j] < bufferX[(i-1)*w +j+0] || bufferX[i*w + j] < bufferX[(i+1)*w +j+0] )
+					{
+						bufferSrc[i*w+j] = 0;
+					}
+				}
+
+				if ( (direction >= 22.5 && direction <= 67.5) || (direction >= 202.5 && direction <= 247.5) )
+				{
+					//case 1
+					if ( bufferX[i*w + j] < bufferX[(i-1)*w +j+1] || bufferX[i*w + j] < bufferX[(i+1)*w +j-1] )
+					{
+						bufferSrc[i*w+j] = 0;
+					}
+				}
+
+				if ( (direction > 337.5 || direction < 22.5) || (direction > 157.5 && direction < 202.5) )
+				{
+					//case 2
+					if ( bufferX[i*w + j] < bufferX[(i+0)*w +j-1] || bufferX[i*w + j] < bufferX[(i+0)*w +j+1] )
+					{
+						bufferSrc[i*w+j] = 0;
+					}
+				}
+
+				if ( (direction >= 112.5 && direction <= 157.5) || (direction >= 292.5 && direction <= 337.5) )
+				{
+					//case 3
+					if ( bufferX[i*w + j] < bufferX[(i-1)*w +j-1] || bufferX[i*w + j] < bufferX[(i+1)*w +j+1] )
+					{
+						bufferSrc[i*w+j] = 0;
+					}
+				}
+
+				//Compute hystogram
+				int intensity = bufferSrc[i*w+j]/5.7;
+				if (intensity > 255)
+					intensity = 255;
+				hist[ intensity ]++;
+				
+				lpDst[i*w + j] = bufferSrc[i*w+j];
+				
+
+			}
+		}
+
+		//Adaptive thresholding
+		float p = 0.1; //quantity of edges
+		float t = 0.4; //min threshold
+		int d = 2;	//distance to a weak pixel to be taken as connected
+		int weak = 40;
+		int weakS = 150;
+		int noNoEdge = (1-p) * (dwHeight * w - hist[0]);
+
+		int count = 0;
+		int threshold = 1;
+		while (count < noNoEdge && threshold < 255)
+		{
+			count = count + hist[threshold];
+			threshold++;
+		}
+
+		int minThreshold = threshold * t;
+
+		for (int i = 1; i<dwHeight-1; i++)
+		{
+			for (int j = 1; j<dwWidth-1; j++)
+			{
+				lpDst[i*w + j] = 0;
+				if ( bufferSrc[i*w+j] > threshold )
+				{
+					lpDst[i*w + j] = 255;
+				} 
+				else if(bufferSrc[i*w+j] > minThreshold)
+				{
+					lpDst[i*w + j] = weak;
+				}
+			}
+		}
+
+
+				for (int i = 1; i<dwHeight-1; i++)
+		{
+			for (int j = 1; j<dwWidth-1; j++)
+			{
+				if (lpDst[i*w + j] == 255)
+				{
+					enqueue(i, j, 255);
+					while (front != NULL)
+					{
+						pixel *p = dequeue();
+						int x = p->x;
+						int y = p->y;
+						lpDst[x*w + y] = weakS;
+						free(p);
+						for (int ii = x-d; ii < x+d; ii++)
+						{
+							if (ii > 0 && ii < dwHeight) //check for out of bounds
+							{
+								for (int jj = y-d; jj < y+d; jj++)
+								{
+									if (jj > 0 && jj < dwWidth) //out of bounds
+									{
+										if (lpDst[ii*w + jj] == weak)
+										{
+											enqueue(ii, jj, weak);
+										}
+									}
+								}
+							
+							}
+						}
+					} //while
+					lpDst[i*w + j] = 255;
+
+				}
+			}
+		}
+
+
+		free(bufferX);
+		free(bufferY);
+		free(bufferSrc);
+		free(hist);
+		
+		END_PROCESSING("Edge detection");
+	}
+
+
+	void CDibView::OnProcessingTest()
+	{
+		
+		BEGIN_PROCESSING();
+
+
+
+
+
+		END_PROCESSING("Test");
 	}

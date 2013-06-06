@@ -171,6 +171,7 @@ BEGIN
             MENUITEM "Gaussian2",                   ID_FILTER_GAUSSIAN2
         END
         MENUITEM "Edge detection",              ID_PROCESSING_EDGEDETECTION
+        MENUITEM "Test",                        ID_PROCESSING_TEST
     END
 END
 

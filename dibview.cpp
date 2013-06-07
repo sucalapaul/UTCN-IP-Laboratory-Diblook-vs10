@@ -1878,10 +1878,13 @@ void four1(double data[], int nn, int isign)
 		return ((a.x==b.x)&&(a.y==b.y));
 	}
 
-	void CDibView::OnProcessingTest()
-	{
-		
+	void CDibView::OnProcessingProject()
+		{
+
+
 		BEGIN_PROCESSING();
+
+
 
 		int threshold = 200;
 
@@ -2051,21 +2054,98 @@ void four1(double data[], int nn, int isign)
 			}
 		}
 
-
-		END_PROCESSING("Test");
-	}
-
-
-
-	void CDibView::OnProcessingProject()
-		{
-
-
-		BEGIN_PROCESSING();
-
-
-
 		
 
 		END_PROCESSING("CONTOUR");
+	}
+
+
+	
+	void CDibView::OnProcessingTest()
+	{
+		
+		BEGIN_PROCESSING();
+
+		int XMIN = -5000;
+		int XMAX = 5000;
+		int ZMIN = 5000;
+		int ZMAX = 30000;
+
+		double projmat[3][4] = 
+		//{{384.7287292, -0.5574115, 245.3588409, 595624.6250000},
+		//{5.5824723, 384.1051941, 186.2327423, 974148.1875000},
+		//{0.0113787, 0.0116350, 0.9998676, 2145.4038086}};
+
+		{{384.7287292, -0.5574115, 245.3588409, 467563.9062500},
+			{5.5824723, 384.1051941, 186.2327423, 974148.1875000},
+			{0.0113787, 0.0113787, 0.9998676, 2145.4038086}};
+
+
+
+		//for (int i=dwHeight - 1; i>=0; i--)
+		//{
+		//	for (int j=0; j<dwWidth-1; j++)
+		//	{
+		//		int x = XMIN + (XMAX-XMIN)*j/dwWidth;
+		//		int z = ZMIN + (ZMAX - ZMIN)*(dwHeight - i - 1) / dwHeight;
+
+		//		double uw = projmat[0][0] * x + projmat[0][2] * z + projmat[0][3]; 
+		//		double vw = projmat[1][0] * x + projmat[1][2] * z + projmat[1][3]; 
+		//		double ww = projmat[2][0] * x + projmat[2][2] * z + projmat[2][3]; 
+
+		//		double u = uw/ww;
+		//		double v = vw/ww;
+
+		//		lpDst[i*w+j] = lpSrc[(int)((dwHeight -v -1)*w+u)];
+		//	}
+		//}
+
+		double sigmaY = 200;
+		double sigmaX = 1;
+		int H = 51;
+		int W = 51;
+
+		int H2 = H/2;
+		int W2 = W/2;
+
+		double kernelY[51];
+		double kernelX[50];
+
+		for (int i = 0; i < H; i++)
+		{
+			kernelY[i] = exp(-((H2-i)*(H2-i))/(sigmaY*sigmaY*2));
+		}
+
+		for (int i = 0; i < W; i++ )
+		{
+			kernelX[i] = ( exp(-(W2-i)*(W2-i)/2*sigmaX*sigmaX) * (1-(W2-i)*(W2-i)/(sigmaX*sigmaX)) ) /(sigmaX*sigmaX);
+		}
+
+		for (int i = H2; i < dwHeight - H2; i++)   //2
+		{
+			for (int j = W2; j < dwWidth - W2; j++)
+			{
+				//parcurg imaginea destinatie   5   2  
+				double sum = 0;
+				for (int ii = 0; ii < H; ii++)  //2-2 = 0   - >    512-2+2 = 512  OK
+				{
+					sum = sum + lpSrc[(i + ii - H2)*w+j] * kernelY[ii];
+				}
+				for (int jj = 0; jj < W; jj++)
+				{
+					//sum = sum + lpSrc[i*w + (j + jj - W2)] * kernelX[jj];
+				}
+				int tmp = sum/35;
+				if (tmp < 0)
+					tmp = 0;
+				if (tmp > 255)
+					tmp = 255;
+				lpDst[i*w+j] = tmp;
+			}
+		}
+
+
+
+
+		END_PROCESSING("Test");
 	}

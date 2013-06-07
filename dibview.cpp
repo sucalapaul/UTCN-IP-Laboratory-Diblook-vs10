@@ -2100,16 +2100,16 @@ void four1(double data[], int nn, int isign)
 		//	}
 		//}
 
-		double sigmaY = 200;
-		double sigmaX = 1;
-		int H = 51;
-		int W = 51;
+		double sigmaY = 2;
+		double sigmaX = 2;
+		int H = 25;
+		int W = 5;
 
 		int H2 = H/2;
 		int W2 = W/2;
 
-		double kernelY[51];
-		double kernelX[50];
+		double kernelY[25];
+		double kernelX[21];
 
 		for (int i = 0; i < H; i++)
 		{
@@ -2118,7 +2118,8 @@ void four1(double data[], int nn, int isign)
 
 		for (int i = 0; i < W; i++ )
 		{
-			kernelX[i] = ( exp(-(W2-i)*(W2-i)/2*sigmaX*sigmaX) * (1-(W2-i)*(W2-i)/(sigmaX*sigmaX)) ) /(sigmaX*sigmaX);
+			kernelX[i] = ( exp(-(W2-i)*(W2-i)/2*sigmaX*sigmaX) * ( 1 - ((W2-i)*(W2-i)/(sigmaX*sigmaX))) ) /(sigmaX*sigmaX);
+			//kernelX[i] = (1- exp(-(W2-i)*(W2-i)/2*sigmaX*sigmaX)) ;// * ( 1 - ((W2-i)*(W2-i)/(sigmaX*sigmaX))) ) /(sigmaX*sigmaX);
 		}
 
 		for (int i = H2; i < dwHeight - H2; i++)   //2
@@ -2133,9 +2134,9 @@ void four1(double data[], int nn, int isign)
 				}
 				for (int jj = 0; jj < W; jj++)
 				{
-					//sum = sum + lpSrc[i*w + (j + jj - W2)] * kernelX[jj];
+					sum = sum + lpSrc[i*w + (j + jj - W2)] * kernelX[jj];
 				}
-				int tmp = sum/35;
+				int tmp = sum/5;  //5H
 				if (tmp < 0)
 					tmp = 0;
 				if (tmp > 255)
@@ -2144,7 +2145,16 @@ void four1(double data[], int nn, int isign)
 			}
 		}
 
-
+		for (int i=0; i< dwHeight; i++)
+		{
+			for (int j=0; j<dwWidth-1; j++)
+			{
+				if ( lpDst[i*w+j] > 240 )
+					lpDst[i*w+j] = 255;
+				else
+					lpDst[i*w+j] = 0;
+			}
+		}
 
 
 		END_PROCESSING("Test");

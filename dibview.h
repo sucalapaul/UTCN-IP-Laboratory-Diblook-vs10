@@ -80,6 +80,7 @@ public:
 	afx_msg void OnFilterGaussian2();
 	afx_msg void OnProcessingEdgedetection();
 	afx_msg void OnProcessingTest();
+	afx_msg void OnProcessingProject();
 };
 
 /////////////////////////////////////////////////////////////////////////////

@@ -172,6 +172,7 @@ BEGIN
         END
         MENUITEM "Edge detection",              ID_PROCESSING_EDGEDETECTION
         MENUITEM "Test",                        ID_PROCESSING_TEST
+        MENUITEM "Project",                     ID_PROCESSING_PROJECT
     END
 END
 

@@ -24,8 +24,10 @@
 #include "BitmapInfoDlg.h"
 #include "DlgHistogram.h"
 #include "CustomBlurDlg.h"
+#include "fft.cpp"
 
-#define PI 3.14159265
+#define PI	3.14159265358979323846	/* pi to machine precision, defined in math.h */
+#define TWOPI	(2.0*PI)
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -141,6 +143,7 @@ IMPLEMENT_DYNCREATE(CDibView, CScrollView)
 		ON_COMMAND(ID_FILTER_GAUSSIAN2, &CDibView::OnFilterGaussian2)
 		ON_COMMAND(ID_PROCESSING_EDGEDETECTION, &CDibView::OnProcessingEdgedetection)
 		ON_COMMAND(ID_PROCESSING_TEST, &CDibView::OnProcessingTest)
+		ON_COMMAND(ID_PROCESSING_PROJECT, &CDibView::OnProcessingProject)
 	END_MESSAGE_MAP()
 
 	/////////////////////////////////////////////////////////////////////////////
@@ -1751,7 +1754,7 @@ IMPLEMENT_DYNCREATE(CDibView, CScrollView)
 		}
 
 
-				for (int i = 1; i<dwHeight-1; i++)
+		for (int i = 1; i<dwHeight-1; i++)
 		{
 			for (int j = 1; j<dwWidth-1; j++)
 			{
@@ -1798,15 +1801,271 @@ IMPLEMENT_DYNCREATE(CDibView, CScrollView)
 		END_PROCESSING("Edge detection");
 	}
 
+	/*
+ FFT/IFFT routine. (see pages 507-508 of Numerical Recipes in C)
+
+ Inputs:
+	data[] : array of complex* data points of size 2*NFFT+1.
+		data[0] is unused,
+		* the n'th complex number x(n), for 0 <= n <= length(x)-1, is stored as:
+			data[2*n+1] = real(x(n))
+			data[2*n+2] = imag(x(n))
+		if length(Nx) < NFFT, the remainder of the array must be padded with zeros
+
+	nn : FFT order NFFT. This MUST be a power of 2 and >= length(x).
+	isign:  if set to 1, 
+				computes the forward FFT
+			if set to -1, 
+				computes Inverse FFT - in this case the output values have
+				to be manually normalized by multiplying with 1/NFFT.
+ Outputs:
+	data[] : The FFT or IFFT results are stored in data, overwriting the input.
+*/
+
+void four1(double data[], int nn, int isign)
+{
+    int n, mmax, m, j, istep, i;
+    double wtemp, wr, wpr, wpi, wi, theta;
+    double tempr, tempi;
+    
+    n = nn << 1;
+    j = 1;
+    for (i = 1; i < n; i += 2) {
+	if (j > i) {
+	    tempr = data[j];     data[j] = data[i];     data[i] = tempr;
+	    tempr = data[j+1]; data[j+1] = data[i+1]; data[i+1] = tempr;
+	}
+	m = n >> 1;
+	while (m >= 2 && j > m) {
+	    j -= m;
+	    m >>= 1;
+	}
+	j += m;
+    }
+    mmax = 2;
+    while (n > mmax) {
+	istep = 2*mmax;
+	theta = TWOPI/(isign*mmax);
+	wtemp = sin(0.5*theta);
+	wpr = -2.0*wtemp*wtemp;
+	wpi = sin(theta);
+	wr = 1.0;
+	wi = 0.0;
+	for (m = 1; m < mmax; m += 2) {
+	    for (i = m; i <= n; i += istep) {
+		j =i + mmax;
+		tempr = wr*data[j]   - wi*data[j+1];
+		tempi = wr*data[j+1] + wi*data[j];
+		data[j]   = data[i]   - tempr;
+		data[j+1] = data[i+1] - tempi;
+		data[i] += tempr;
+		data[i+1] += tempi;
+	    }
+	    wr = (wtemp = wr)*wpr - wi*wpi + wr;
+	    wi = wi*wpr + wtemp*wpi + wi;
+	}
+	mmax = istep;
+    }
+}
+
+
+	typedef struct punct{
+	int x;
+	int y;
+	};
+
+	bool punctEgal(punct a, punct b){
+		return ((a.x==b.x)&&(a.y==b.y));
+	}
 
 	void CDibView::OnProcessingTest()
 	{
 		
 		BEGIN_PROCESSING();
 
+		int threshold = 200;
+
+		for (int i=1; i<dwHeight-1; i++)
+		{
+			for (int j=1; j<dwWidth-1; j++)
+			{
+				if (lpSrc[i*w+j] > threshold)
+					lpSrc[i*w+j] = 255;
+				else
+					lpSrc[i*w+j] = 0;
+
+			}
+		}
+		
+		//int filter[10] = {0, -1, 0,   -1, 4, -1,   0, -1, 0,   1};
+		//float pixel;
+
+		//for (int i=1; i<dwHeight-1; i++)
+		//{
+		//	for (int j=1; j<dwWidth-1; j++)
+		//	{
+		//		pixel = lpSrc[(i-1)*w+j-1]*filter[0] + lpSrc[(i-1)*w+j+0]*filter[1] + lpSrc[(i-1)*w+j+1]*filter[2] +
+		//				lpSrc[(i+0)*w+j-1]*filter[3] + lpSrc[(i+0)*w+j+0]*filter[4] + lpSrc[(i+0)*w+j+1]*filter[5] +
+		//				lpSrc[(i+1)*w+j-1]*filter[6] + lpSrc[(i+1)*w+j+0]*filter[7] + lpSrc[(i+1)*w+j+1]*filter[8];
+		//		pixel = pixel / filter[9];
+
+		//		if (pixel < 0)
+		//		{
+		//			pixel = 0;
+		//		}
+		//		if (pixel > 255)
+		//		{
+		//			pixel = 255;
+		//		}
+		//		
+		//		lpDst[i*w+j] = pixel;
+		//	}
+		//}
+		
+		int x, y;
+		bool found = false;
+		
+		int dx[] ={1,1,0,-1,-1,-1,0,1};
+		int dy[] = {0,1,1,1,0,-1,-1,-1};
+		int p[1000];
+		punct p0,p1,pn1,pn;
+		memset(lpDst,255,w*dwHeight);
+
+		for (int i=1; i<dwHeight-1; i++)
+		{
+			for (int j=1; j<dwWidth-1; j++)
+			{
+				if (lpSrc[i*w+j] == 0 )
+				{
+					x = i;
+					y = j;
+					p0.x = j;
+					p0.y = i;
+
+					found = true;
+					break;
+				}
+			}
+			if (found)
+				break;
+		}
+
+		int dir = 7;
+		int toate = 1;
+		p1 = p0;
+		pn1 = p0;
+		pn = p1;
+		p1.x = -1;
+		p1.y = -1;
+		int a = 7;
+		int b = 7;
+		int count = 0;
+		int jump = 0;
+
+		int Nx;
+		int NFFT;
+		double *X;
+
+		X = (double *) malloc((4000) * sizeof(double)); //2*NFFT+1
+
+		//determine rest of the points
+		while((!( (toate > 2) && (punctEgal(p0,pn1)) &&(punctEgal(p1,pn)) ))&&(toate < 1500))
+		{
+			if(dir % 2 == 1){
+				//cazul (e)
+				dir = (dir + 6) % 8 ;
+			}
+			else{
+				//cazul (d)
+				dir = (dir + 7) % 8;
+		
+			}
+			//next direction
+			while(lpSrc[(pn.y + dy[dir]) * w + (pn.x + dx[dir])]!=0){
+				dir = (dir + 1 )%8;
+			}
+			//next pixel
+			pn1.x = pn.x;
+			pn1.y = pn.y;
+			pn.x += dx[dir];
+			pn.y += dy[dir];
+			if(p1.x<0){
+				p1.x = pn.x;
+				p1.y = pn.y;
+			}
+		
+	
+			
+			//compute derivative
+			b = a;
+			a = dir;
+			int dd = (b-a+8)%8;
 
 
+			//destination image
+			if (jump > 3)
+			{
+				//lpDst[pn.y*w+pn.x]= 0;  //y - real part
+				jump = 0;
+				X[2*count+1] = pn.y; //real;
+				X[2*count+2] = pn.x; //imaginary;
+				count ++;
+			}
+			jump ++;
+			toate++;
+		}
+
+		Nx = count;
+		NFFT = (int)pow(2.0, ceil(log((double)Nx)/log(2.0)));
+
+		/* pad the remainder of the array with zeros (0 + 0 j) */
+		for(int i=Nx; i<NFFT; i++)
+		{
+			X[2*i+1] = 0.0;
+			X[2*i+2] = 0.0;
+		}
+		four1(X, NFFT, 1);
+
+		for(int i=20; i<NFFT; i++) 
+		{
+			X[2*i+1] = 0;
+			X[2*i+2] = 0;
+		}
+
+
+		/* calculate IFFT */
+		four1(X, NFFT, -1);
+
+		/* normalize the IFFT */
+		for(int i=0; i<NFFT; i++)
+		{
+			X[2*i+1] /= NFFT;
+			X[2*i+2] /= NFFT;
+
+			int xx = (int)X[2*i+1];
+			int yy = (int)X[2*i+2];
+
+			if (xx > 0 && xx < dwHeight && yy > 0 && yy < dwWidth)
+			{
+				lpDst[xx*w+yy] = 0; //real
+			}
+		}
 
 
 		END_PROCESSING("Test");
+	}
+
+
+
+	void CDibView::OnProcessingProject()
+		{
+
+
+		BEGIN_PROCESSING();
+
+
+
+		
+
+		END_PROCESSING("CONTOUR");
 	}
